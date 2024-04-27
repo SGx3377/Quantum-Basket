@@ -1,0 +1,24 @@
+CREATE TRIGGER setnull_trigger 
+BEFORE INSERT ON order_feedback
+FOR EACH ROW
+    SET NEW.complaint = CASE
+        WHEN NEW.complaint = ' ' THEN NULL
+        ELSE NEW.complaint
+    END;
+
+
+CREATE TRIGGER update_deliveryRating
+AFTER INSERT ON delivery_feedback
+FOR EACH ROW
+    UPDATE delivery_partner
+    SET deliveryPartner_rating = (deliveryPartner_rating * num_orders_delivered + NEW.rating) / (num_orders_delivered + 1),
+        num_orders_delivered = num_orders_delivered + 1
+    WHERE deliveryPartner_ID = NEW.deliveryPartner;
+
+
+CREATE TRIGGER update_deliveryPartnerStatus
+AFTER INSERT ON delivers
+FOR EACH ROW
+	UPDATE delivery_partner
+    SET availability_status = 'Not Available'
+    WHERE deliveryPartner_ID = NEW.deliveryPartner_ID
