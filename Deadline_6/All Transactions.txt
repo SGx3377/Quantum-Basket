@@ -1,0 +1,220 @@
+All Transactions
+
+Conflicting Transactions
+1.
+-- Start the transaction
+START TRANSACTION;
+-- Transaction 1: Update Total Price and Discounted Price
+UPDATE Orders
+SET Total_Price = 150, Discounted_Price = 120
+WHERE Order_ID = 1; 
+-- Commit Transaction 1
+COMMIT;
+
+-- Start a new transaction
+START TRANSACTION;
+-- Transaction 2: Update Order Status and Priority 
+Select * from Orders;
+UPDATE Orders
+SET OrderStatus = 'Shipped', OrderPriority = 'High'
+WHERE Order_ID = 1; 
+-- Commit Transaction 2 
+COMMIT;
+
+These two transactions are conflicting because they are trying to update different columns of the same row in the `Orders` table concurrently without any coordination or synchronization mechanism. Here's an explanation of why they conflict:
+
+1. Transaction 1: Update Total Price and Discounted Price
+   - Transaction 1 updates the `Total_Price` and `Discounted_Price` columns of the order with `Order_ID = 1`.
+
+2. Transaction 2: Update Order Status and Priority
+   - Transaction 2 updates the `OrderStatus` and `OrderPriority` columns of the same order with `Order_ID = 1`.
+
+The conflict arises because both transactions are operating on the same row (`Order_ID = 1`) simultaneously. When multiple transactions attempt to modify the same data concurrently, conflicts can occur if there is no mechanism in place to handle concurrency.
+
+In this scenario, if Transaction 1 and Transaction 2 execute concurrently without coordination:
+- Transaction 1 might read the initial state of the row, update the `Total_Price` and `Discounted_Price`, and commit the changes.
+- Meanwhile, Transaction 2 might also read the initial state of the row (before Transaction 1's changes are committed), update the `OrderStatus` and `OrderPriority`, and commit its changes.
+
+The result could be that one of the transactions overwrites the changes made by the other, leading to data inconsistency or incorrect values in the `Orders` table.
+
+To resolve this conflict and ensure data consistency, you would typically use mechanisms such as locking (e.g., row-level locks) or serializable isolation levels to coordinate access to shared data and prevent concurrent conflicting updates.
+
+Correction using Locking: 
+
+-- Start Transaction 1
+START TRANSACTION;
+
+-- Transaction 1: Lock rows for update
+SELECT * FROM Orders WHERE Order_ID = 1 FOR UPDATE;
+-- Perform updates here
+UPDATE Orders SET Total_Price = 150, Discounted_Price = 120 WHERE Order_ID = 1;
+
+-- Commit Transaction 1
+COMMIT;
+
+-- Start Transaction 2
+START TRANSACTION;
+
+-- Transaction 2: Lock rows for update
+SELECT * FROM Orders WHERE Order_ID = 1 FOR UPDATE;
+-- Perform updates here
+UPDATE Orders SET OrderStatus = 'Shipped', OrderPriority = 'High' WHERE Order_ID = 1;
+
+-- Commit Transaction 2
+COMMIT;
+
+
+2.
+-- Start Transaction 1
+START TRANSACTION;
+INSERT INTO Orders (Order_ID, Total_Price, Discounted_Price, Total_Number_of_Items, OrderStatus, PaymentMode, OrderDate, OrderPriority, Customer_ID, Head_Office_Name) VALUES (20, 100, 80,2, 'Pending', 'Credit Card', '2024-04-25', 'Normal', 1, 'Quantum Basket');
+-- Assume Customer_ID, Order_ID, and DeliveryPartner_ID are known
+INSERT INTO delivers (Customer_ID, Order_ID, DeliveryPartner_ID, Delivery_Status) VALUES (1, 20, 12, 'In Transit');  -- Assigning Delivery Partner 301 to Order 2001 for Customer 101
+
+-- Commit Transaction 1
+COMMIT;
+
+-- Start Transaction 2
+START TRANSACTION;
+
+SELECT * FROM delivers WHERE Customer_ID = 1 AND Order_ID = 20 AND DeliveryPartner_ID = 12;
+-- Assume Customer_ID, Order_ID, and DeliveryPartner_ID are known
+UPDATE delivers SET Delivery_Status = 'Delivered'  -- Attempting to update Delivery_Status to 'Delivered' for the same delivery WHERE Customer_ID = 1 AND Order_ID = 20 AND DeliveryPartner_ID = 12;
+
+-- Commit Transaction 2
+COMMIT;
+
+These two transactions are conflicting because they are trying to perform concurrent operations on the same data in the `delivers` table, specifically for the same delivery represented by the combination of `Customer_ID`, `Order_ID`, and `DeliveryPartner_ID`.
+
+1. Transaction 1: Assign Delivery Partner and Set Status
+   - Transaction 1 inserts a new row into the `delivers` table, assigning a delivery partner to a specific order and setting the initial delivery status to 'In Transit'.
+
+2. Transaction 2: Update Delivery Status
+   - Transaction 2 attempts to update an existing row in the `delivers` table where the delivery status is 'In Transit' to 'Delivered'.
+
+The conflict arises because Transaction 1 and Transaction 2 are both trying to modify the same delivery's status simultaneously. Since both transactions are executing concurrently, there is a race condition where Transaction 2 may try to update the status before Transaction 1 completes the initial insertion and status assignment.
+
+This conflict can lead to data inconsistency or integrity issues if both transactions are allowed to proceed without coordination or locking mechanisms. To ensure data consistency and avoid conflicts, proper concurrency control mechanisms such as locking or serializable isolation levels should be implemented to coordinate access to shared data.
+
+Correction using Locking
+-- Start Transaction 1
+START TRANSACTION;
+
+-- Assume Customer_ID, Order_ID, and DeliveryPartner_ID are known
+-- Lock the row before inserting
+SELECT * FROM delivers WHERE Customer_ID = 1 AND Order_ID = 20 AND DeliveryPartner_ID = 12 FOR UPDATE;
+
+-- Insert into delivers table
+INSERT INTO delivers (Customer_ID, Order_ID, DeliveryPartner_ID, Delivery_Status)
+VALUES (1, 20, 12, 'In Transit');  -- Assigning Delivery Partner 12 to Order 20 for Customer 1
+
+-- Commit Transaction 1
+COMMIT;
+
+-- Start Transaction 2
+START TRANSACTION;
+
+-- Assume Customer_ID, Order_ID, and DeliveryPartner_ID are known
+-- Lock the row before updating
+SELECT * FROM delivers WHERE Customer_ID = 1 AND Order_ID = 20 AND DeliveryPartner_ID = 12 FOR UPDATE;
+
+-- Update the delivery status
+UPDATE delivers
+SET Delivery_Status = 'Delivered'  -- Attempting to update Delivery_Status to 'Delivered' for the same delivery
+WHERE Customer_ID = 1 AND Order_ID = 20 AND DeliveryPartner_ID = 12;
+
+-- Commit Transaction 2
+COMMIT;
+
+
+Non-Conflicting Transactions
+
+-- 1.1
+START TRANSACTION;
+UPDATE discount
+SET end_date = '2024-12-25'  
+WHERE Discount_ID = 3;
+COMMIT;
+
+-- 1.2
+START TRANSACTION;
+UPDATE discount
+SET end_date = '2024-12-11'  
+WHERE Discount_ID = 2;
+COMMIT;
+
+-- 2.1
+START TRANSACTION;
+SELECT Name
+FROM delivery_partner
+WHERE DeliveryPartner_Rating > 4;
+COMMIT;
+
+-- 2.2
+START TRANSACTION;
+SELECT Name, Phone_Number, DeliveryPartner_Rating
+FROM delivery_partner
+WHERE DeliveryPartner_Rating > 4;
+COMMIT;
+
+-- 3.1
+START TRANSACTION;
+INSERT INTO Customer (Customer_ID, First_Name, Last_Name, Mail_ID, Phone_1, Phone_2, Phone_3, Address_1, Address_2, Address_3, Pincode_1, Pincode_2, Pincode_3, Head_Office_Name, Password)
+VALUE (26, 'Rahul', 'Singh', 'rahul.singh@email.com', 9988776654, NULL, NULL, '901 Saraswati Bhavan', 'Apt 203', NULL, 201306, 201307, NULL, 'Quantum Basket', 'password26');
+COMMIT;
+
+-- 3.2
+START TRANSACTION;
+INSERT INTO Manager (Manager_ID, First_Name, Last_Name, Phone_Number, Email_ID, Salary, Joining_Date, Warehouse_ID, Head_Office_Name)
+VALUE (11, 'Kavita', 'Mishra', 9988776655, 'kavita.mishra@email.com', 78000, '2021-09-20', 6, 'Quantum Basket');
+COMMIT;
+
+-- 4.1
+START TRANSACTION;
+UPDATE Customer
+SET Last_Name = 'Kapoor'
+WHERE Customer_ID = 2;
+
+UPDATE Items
+SET price = 30
+WHERE Item_ID = 3;
+
+COMMIT;
+
+
+-- 4.2
+START TRANSACTION;
+UPDATE Warehouse_Items
+SET Item_Quantity = Item_Quantity - 5
+WHERE Warehouse_ID = 2 AND Item_ID = 6;
+
+INSERT INTO Warehouse_Items (Warehouse_ID, Item_ID, Item_Quantity)
+VALUES (3, 40, 30);
+
+UPDATE Warehouse_Items
+SET Item_Quantity = Item_Quantity + 5
+WHERE Warehouse_ID = 1 AND Item_ID = 6;
+
+COMMIT;
+
+--5.1
+START TRANSACTION;
+-- Assume Cart_ID and Item_ID are known
+INSERT INTO Cart_Items (Cart_ID, Item_ID, Num_Items)
+VALUES (1, 101, 2);  -- Adding 2 units of Item_ID 101 to Cart_ID 1
+
+-- Commit Transaction 1
+COMMIT;
+
+--5.2
+START TRANSACTION;
+-- Assume Cart_ID and Item_ID are known
+UPDATE Cart_Items
+SET Num_Items = 3  -- Update the quantity of Item_ID 101 to 3 units in Cart_ID 1
+WHERE Cart_ID = 1 AND Item_ID = 101;
+-- Commit Transaction 2
+COMMIT;
+
+
+
+
